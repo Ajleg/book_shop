@@ -11,7 +11,7 @@ A Django web application for browsing and managing books, containerized with Doc
 
 1. Clone the repo:
 
-   git clone https://github.com/ayat93a/book_shop.git
+   git clone https://github.com/Ajleg/book_shop.git
    cd book_shop
 
 2. Create a .env file from the example:
