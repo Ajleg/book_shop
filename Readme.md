@@ -1,3 +1,25 @@
-# Django 4.0.4 Tutorial Series
-## Full Documentation is here 
-[Django 4.0.4 Best Practices Tutorial : Part 1](https://ayat.hashnode.dev/django-404-best-practices-tutorial-part-1)
+# Book Shop — Docker Deployment
+
+A Django web application for browsing and managing books, containerized with Docker.
+
+## Requirements
+
+- Docker
+- Docker Compose
+
+## Setup
+
+1. Clone the repo:
+
+   git clone https://github.com/ayat93a/book_shop.git
+   cd book_shop
+
+2. Create a .env file from the example:
+
+   cp .env.example .env
+
+3. Build and run:
+
+   docker compose up --build
+
+4. Open http://localhost:8000 in your browser.
