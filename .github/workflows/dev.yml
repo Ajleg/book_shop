@@ -4,81 +4,43 @@ on:
   push:
     branches: [dev]
 
-permissions:
-  contents: write
-
 jobs:
   build-artifact:
     runs-on: ubuntu-latest
     outputs:
-      artifact_name: ${{ steps.vars.outputs.artifact_name }}
-      image_tag: ${{ steps.vars.outputs.image_tag }}
+      artifact_name: ${{ steps.build.outputs.artifact_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set variables
-        id: vars
-        run: |
-          SHA="${GITHUB_SHA::8}"
-          echo "artifact_name=app-${SHA}.tar.gz" >> $GITHUB_OUTPUT
-          echo "image_tag=dev-${SHA}" >> $GITHUB_OUTPUT
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r book-shop/requirements.txt
-
-      - name: Collect static files
-        env:
-          SECRET_KEY: dummy-secret-for-ci
-          DEBUG: "False"
-          DB_NAME: dummy
-          DB_USER: dummy
-          DB_PASSWORD: dummy
-          DB_HOST: localhost
-          DB_PORT: "5432"
+      - name: Build artifact
+        id: build
         run: |
-          cd book-shop
-          python manage.py collectstatic --noinput
+          ARTIFACT_NAME="app-${GITHUB_SHA::8}.tar.gz"
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
 
-      - name: Freeze dependencies
-        run: pip freeze > book-shop/requirements-frozen.txt
+          # Install all dependencies into vendor/ inside the source tree
+          pip install -r book-shop/requirements.txt --target book-shop/vendor
 
-      - name: Package artifact
-        run: |
+          # Package source + vendor into a single artifact
           mkdir -p artifacts
-          tar -czf artifacts/${{ steps.vars.outputs.artifact_name }} \
-            --exclude=book-shop/db.sqlite3 \
-            --exclude=book-shop/.env \
-            book-shop/
+          tar -czf artifacts/${ARTIFACT_NAME} book-shop/
 
-      - name: Commit artifact to repo
+      - name: Commit artifact to dev branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f artifacts/
-          git commit -m "ci: add artifact ${{ steps.vars.outputs.artifact_name }} [skip ci]"
-          git push
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push Docker image from artifact
-        run: |
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/book_shop"
-          TAG="${{ steps.vars.outputs.image_tag }}"
-          docker build \
-            --build-arg ARTIFACT_PATH=artifacts/${{ steps.vars.outputs.artifact_name }} \
-            -t ${IMAGE}:${TAG} .
-          docker push ${IMAGE}:${TAG}
+          git add artifacts/
+          git commit -m "ci: artifact ${{ steps.build.outputs.artifact_name }} [skip ci]"
+          git push origin HEAD:dev
 
   deploy:
     needs: build-artifact
@@ -90,16 +52,14 @@ jobs:
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
-          IMAGE_TAG: ${{ needs.build-artifact.outputs.image_tag }}
+          ARTIFACT_NAME: ${{ needs.build-artifact.outputs.artifact_name }}
         with:
           host: ${{ vars.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: SECRET_KEY,POSTGRES_PASSWORD,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,GH_TOKEN,GITHUB_REPO,IMAGE_TAG
+          envs: SECRET_KEY,POSTGRES_PASSWORD,GH_TOKEN,GITHUB_REPO,ARTIFACT_NAME
           script: |
             APP_DIR=~/book_shop_dev
 
@@ -114,12 +74,12 @@ jobs:
 
             cd $APP_DIR
 
-            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_TAG=%s\n' \
-              "${SECRET_KEY}" "${POSTGRES_PASSWORD}" "${DOCKERHUB_USERNAME}" "${IMAGE_TAG}" > .env
+            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=bookshop_dev\nPOSTGRES_USER=postgres\n' \
+              "${SECRET_KEY}" "${POSTGRES_PASSWORD}" > .env
 
-            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+            # Build image FROM the committed artifact — not from source
+            docker build --build-arg ARTIFACT_NAME=${ARTIFACT_NAME} -t book_shop:dev .
 
-            docker compose -p dev -f docker-compose.dev.yml pull
             docker compose -p dev -f docker-compose.dev.yml down --remove-orphans
             docker compose -p dev -f docker-compose.dev.yml up -d
 
