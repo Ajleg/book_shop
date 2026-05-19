@@ -3,7 +3,7 @@
 A Django web application for browsing and managing books, containerized with Docker and deployed via GitHub Actions.
 
 ## Group Size
-Group of 2.
+Group of 1.
 
 ## Branch Strategy
 
