@@ -31,6 +31,9 @@ jobs:
 
           # Rebuild completely from source — never use the dev artifact
           pip install -r book-shop/requirements.txt --target book-shop/vendor
+          # Collect static files before packaging
+          PYTHONPATH=book-shop/vendor SECRET_KEY=dummy-build-key \
+            python book-shop/manage.py collectstatic --noinput
 
           mkdir -p artifacts
           tar -czf artifacts/${ARTIFACT_NAME} book-shop/
