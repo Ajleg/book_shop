@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  db_prod:
+    image: postgres:15
+    env_file:
+      - .env.prod
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    container_name: bookshop_db_prod
+
+  backend_prod:
+    build: .
+    env_file:
+      - .env.prod
+    ports:
+      - "8002:8000"
+    depends_on:
+      - db_prod
+    container_name: bookshop_backend_prod
+    command: >
+      sh -c "sleep 3 &&
+             python manage.py migrate &&
+             gunicorn book_shop.wsgi:application --bind 0.0.0.0:8000"
+
+volumes:
+  postgres_data_prod:
