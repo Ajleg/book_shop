@@ -29,6 +29,9 @@ jobs:
 
           # Install all dependencies into vendor/ inside the source tree
           pip install -r book-shop/requirements.txt --target book-shop/vendor
+          # Collect static files before packaging
+          PYTHONPATH=book-shop/vendor SECRET_KEY=dummy-build-key \
+            python book-shop/manage.py collectstatic --noinput
 
           # Package source + vendor into a single artifact
           mkdir -p artifacts
