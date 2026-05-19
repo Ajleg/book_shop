@@ -1,33 +1,31 @@
 version: '3.8'
 
 services:
-  web:
-    image: ${DOCKERHUB_USERNAME}/book_shop:${IMAGE_VERSION}
-    container_name: book_shop_prod
-    restart: always
-    ports:
-      - "80:8000"
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - DEBUG=False
-      - DB_NAME=book_shop_db_prod
-      - DB_USER=book_shop_user
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_HOST=db
-      - DB_PORT=5432
-    depends_on:
-      - db
-
   db:
     image: postgres:15
-    container_name: book_shop_db_prod
-    restart: always
     environment:
-      - POSTGRES_DB=book_shop_db_prod
-      - POSTGRES_USER=book_shop_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - prod_network
+
+  web:
+    image: ${DOCKERHUB_USERNAME}/book_shop:${IMAGE_VERSION}
+    env_file: .env
+    ports:
+      - "8003:8000"
+    depends_on:
+      - db
+    networks:
+      - prod_network
+
+networks:
+  prod_network:
+    name: prod_network
 
 volumes:
   postgres_data_prod:
+    name: postgres_data_prod

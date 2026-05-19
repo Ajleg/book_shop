@@ -34,19 +34,18 @@ jobs:
               git reset --hard origin/prod
             else
               git clone -b prod https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git $APP_DIR
-              cd $APP_DIR
             fi
 
             cd $APP_DIR
 
-            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_VERSION=%s\n' \
+            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_VERSION=%s\nPOSTGRES_DB=bookshop_prod\nPOSTGRES_USER=postgres\n' \
               "${SECRET_KEY}" "${POSTGRES_PASSWORD}" "${DOCKERHUB_USERNAME}" "${IMAGE_VERSION}" > .env
 
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml down --remove-orphans
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -p prod -f docker-compose.prod.yml pull
+            docker compose -p prod -f docker-compose.prod.yml down --remove-orphans
+            docker compose -p prod -f docker-compose.prod.yml up -d
 
             sleep 10
-            docker compose -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput
+            docker compose -p prod -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput
 
             echo "Prod deployment complete!"

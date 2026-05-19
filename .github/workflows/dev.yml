@@ -5,7 +5,48 @@ on:
     branches: [dev]
 
 jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.build.outputs.artifact_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build artifact
+        id: build
+        run: |
+          ARTIFACT_NAME="app-${GITHUB_SHA::8}.tar.gz"
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+
+          # Install all dependencies into vendor/ inside the source tree
+          pip install -r book-shop/requirements.txt --target book-shop/vendor
+          # Collect static files before packaging
+          PYTHONPATH=book-shop/vendor SECRET_KEY=dummy-build-key \
+            python book-shop/manage.py collectstatic --noinput
+
+          # Package source + vendor into a single artifact
+          mkdir -p artifacts
+          tar -czf artifacts/${ARTIFACT_NAME} book-shop/
+
+      - name: Commit artifact to dev branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add artifacts/
+          git commit -m "ci: artifact ${{ steps.build.outputs.artifact_name }} [skip ci]"
+          git push origin HEAD:dev
+
   deploy:
+    needs: build-artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -16,11 +57,12 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+          ARTIFACT_NAME: ${{ needs.build-artifact.outputs.artifact_name }}
         with:
           host: ${{ vars.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: SECRET_KEY,POSTGRES_PASSWORD,GH_TOKEN,GITHUB_REPO
+          envs: SECRET_KEY,POSTGRES_PASSWORD,GH_TOKEN,GITHUB_REPO,ARTIFACT_NAME
           script: |
             APP_DIR=~/book_shop_dev
 
@@ -31,18 +73,20 @@ jobs:
               git reset --hard origin/dev
             else
               git clone -b dev https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git $APP_DIR
-              cd $APP_DIR
             fi
 
             cd $APP_DIR
 
-            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\n' \
+            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=bookshop_dev\nPOSTGRES_USER=postgres\n' \
               "${SECRET_KEY}" "${POSTGRES_PASSWORD}" > .env
 
-            docker compose -f docker-compose.dev.yml down --remove-orphans
-            docker compose -f docker-compose.dev.yml up -d --build
+            # Build image FROM the committed artifact — not from source
+            docker build --build-arg ARTIFACT_NAME=${ARTIFACT_NAME} -t book_shop:dev .
+
+            docker compose -p dev -f docker-compose.dev.yml down --remove-orphans
+            docker compose -p dev -f docker-compose.dev.yml up -d
 
             sleep 10
-            docker compose -f docker-compose.dev.yml exec -T web python manage.py migrate --noinput
+            docker compose -p dev -f docker-compose.dev.yml exec -T web python manage.py migrate --noinput
 
             echo "Dev deployment complete!"
