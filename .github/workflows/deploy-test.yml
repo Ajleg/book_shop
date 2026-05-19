@@ -1,0 +1,22 @@
+name: Deploy to Test
+
+on:
+  push:
+    branches:
+      - test
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Deploy Test
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/book_shop
+            git pull origin test
+            docker-compose -f docker-compose.test.yml down
+            docker-compose -f docker-compose.test.yml up -d --build
