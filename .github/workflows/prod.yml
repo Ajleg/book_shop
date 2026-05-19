@@ -15,7 +15,6 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
           IMAGE_VERSION: ${{ vars.IMAGE_VERSION }}
@@ -23,7 +22,7 @@ jobs:
           host: ${{ vars.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: SECRET_KEY,POSTGRES_PASSWORD,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,GH_TOKEN,GITHUB_REPO,IMAGE_VERSION
+          envs: SECRET_KEY,POSTGRES_PASSWORD,DOCKERHUB_USERNAME,GH_TOKEN,GITHUB_REPO,IMAGE_VERSION
           script: |
             APP_DIR=~/book_shop_prod
 
@@ -38,10 +37,8 @@ jobs:
 
             cd $APP_DIR
 
-            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_VERSION=%s\n' \
+            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_VERSION=%s\nPOSTGRES_DB=bookshop_prod\nPOSTGRES_USER=postgres\n' \
               "${SECRET_KEY}" "${POSTGRES_PASSWORD}" "${DOCKERHUB_USERNAME}" "${IMAGE_VERSION}" > .env
-
-            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
 
             docker compose -p prod -f docker-compose.prod.yml pull
             docker compose -p prod -f docker-compose.prod.yml down --remove-orphans
