@@ -16,7 +16,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/aj/book_shop
+            cd /home/ubuntu/book_shop
             git pull origin test
             docker compose -f docker-compose.test.yml down
             docker compose -f docker-compose.test.yml up -d --build
