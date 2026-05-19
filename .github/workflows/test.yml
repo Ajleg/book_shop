@@ -1,0 +1,79 @@
+name: Test CI/CD Pipeline
+
+on:
+  push:
+    branches: [test]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: vars
+        run: echo "image_tag=test-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/book_shop"
+          TAG="${{ steps.vars.outputs.image_tag }}"
+          docker build -t ${IMAGE}:${TAG} -t ${IMAGE}:latest .
+          docker push ${IMAGE}:${TAG}
+          docker push ${IMAGE}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 (Test)
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        with:
+          host: ${{ vars.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: SECRET_KEY,POSTGRES_PASSWORD,DOCKERHUB_USERNAME,GH_TOKEN,GITHUB_REPO,IMAGE_TAG
+          script: |
+            APP_DIR=~/book_shop_test
+
+            if [ -d "$APP_DIR/.git" ]; then
+              cd $APP_DIR
+              git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git
+              git fetch origin
+              git reset --hard origin/test
+            else
+              git clone -b test https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git $APP_DIR
+              cd $APP_DIR
+            fi
+
+            cd $APP_DIR
+
+            printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nDOCKERHUB_USERNAME=%s\nIMAGE_TAG=%s\n' \
+              "${SECRET_KEY}" "${POSTGRES_PASSWORD}" "${DOCKERHUB_USERNAME}" "${IMAGE_TAG}" > .env
+
+            docker compose -f docker-compose.test.yml pull
+            docker compose -f docker-compose.test.yml down --remove-orphans
+            docker compose -f docker-compose.test.yml up -d
+
+            sleep 10
+            docker compose -f docker-compose.test.yml exec -T web python manage.py migrate --noinput
+
+            echo "Test deployment complete!"

@@ -1,27 +1,33 @@
 version: '3.8'
 
 services:
-  db_test:
-    image: postgres:15
-    env_file:
-      - .env.test
-    volumes:
-      - postgres_data_test:/var/lib/postgresql/data
-    container_name: bookshop_db_test
-
-  backend_test:
-    build: .
-    env_file:
-      - .env.test
+  web:
+    image: ${DOCKERHUB_USERNAME}/book_shop:${IMAGE_TAG}
+    container_name: book_shop_test
+    restart: always
     ports:
       - "8001:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=False
+      - DB_NAME=book_shop_db_test
+      - DB_USER=book_shop_user
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
     depends_on:
-      - db_test
-    container_name: bookshop_backend_test
-    command: >
-      sh -c "sleep 3 &&
-             python manage.py migrate &&
-             gunicorn book_shop.wsgi:application --bind 0.0.0.0:8000"
+      - db
+
+  db:
+    image: postgres:15
+    container_name: book_shop_db_test
+    restart: always
+    environment:
+      - POSTGRES_DB=book_shop_db_test
+      - POSTGRES_USER=book_shop_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
 
 volumes:
   postgres_data_test:

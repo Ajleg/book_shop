@@ -1,27 +1,33 @@
 version: '3.8'
 
 services:
-  db_prod:
+  web:
+    image: ${DOCKERHUB_USERNAME}/book_shop:${IMAGE_VERSION}
+    container_name: book_shop_prod
+    restart: always
+    ports:
+      - "80:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=False
+      - DB_NAME=book_shop_db_prod
+      - DB_USER=book_shop_user
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      - db
+
+  db:
     image: postgres:15
-    env_file:
-      - .env.prod
+    container_name: book_shop_db_prod
+    restart: always
+    environment:
+      - POSTGRES_DB=book_shop_db_prod
+      - POSTGRES_USER=book_shop_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
-    container_name: bookshop_db_prod
-
-  backend_prod:
-    build: .
-    env_file:
-      - .env.prod
-    ports:
-      - "8002:8000"
-    depends_on:
-      - db_prod
-    container_name: bookshop_backend_prod
-    command: >
-      sh -c "sleep 3 &&
-             python manage.py migrate &&
-             gunicorn book_shop.wsgi:application --bind 0.0.0.0:8000"
 
 volumes:
   postgres_data_prod:
