@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME}/book_shop:${IMAGE_TAG}
     container_name: book_shop_dev
     restart: always
     ports:
